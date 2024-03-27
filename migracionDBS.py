@@ -36,6 +36,15 @@ def get_tables(cursor, db_type):
     else:
         return [row[0] for row in cursor.fetchall()]
 
+def get_table_indexes(cursor, db_type, table_name):
+    index_query = {
+        "mysql": f"SHOW INDEX FROM {table_name}",
+        "sqlserver": f"SELECT index_name FROM sys.indexes WHERE object_id = OBJECT_ID('{table_name}')",
+        "postgresql": f"SELECT indexname FROM pg_indexes WHERE tablename = '{table_name}'",
+    }[db_type]
+    cursor.execute(index_query)
+    return [row[0] for row in cursor.fetchall()]
+
 def compare_table_counts(cursor1, cursor2, table_name):
     query = f"SELECT COUNT(*) FROM {table_name}"
     cursor1.execute(query)
@@ -44,7 +53,14 @@ def compare_table_counts(cursor1, cursor2, table_name):
     count2 = cursor2.fetchone()[0]
     return (count1, count2)
 
-# Nombre del archivo de log, constante para mantener historial
+def compare_table_details(cursor1, cursor2, db_type1, db_type2, table_name):
+    count1, count2 = compare_table_counts(cursor1, cursor2, table_name)
+    indexes1 = get_table_indexes(cursor1, db_type1, table_name)
+    indexes2 = get_table_indexes(cursor2, db_type2, table_name)
+    index_differences = set(indexes1) ^ set(indexes2)
+    return (count1, count2, indexes1, indexes2, index_differences)
+
+# Nombre del archivo de log
 log_file_name = "db_comparisons_history.txt"
 
 # Función para agregar el encabezado de la ejecución al archivo de log
@@ -59,7 +75,7 @@ add_execution_header_to_log()
 
 # Crear la tabla para el registro y la visualización
 table = PrettyTable()
-table.field_names = ["Tabla", "Servidor 1", "Servidor 2", "Estado"]
+table.field_names = ["Tabla", "Servidor 1 (Registros)", "Servidor 2 (Registros)", "Estado Registros", "Índices Servidor 1", "Índices Servidor 2", "Diferencias Índices"]
 
 with get_db_connection(os.getenv('DB_TYPE_1'), os.getenv('HOST_1'), os.getenv('DB_NAME_1'), os.getenv('USER_1'), os.getenv('PASSWORD_1')) as conn1, \
      get_db_connection(os.getenv('DB_TYPE_2'), os.getenv('HOST_2'), os.getenv('DB_NAME_2'), os.getenv('USER_2'), os.getenv('PASSWORD_2')) as conn2:
@@ -71,17 +87,36 @@ with get_db_connection(os.getenv('DB_TYPE_1'), os.getenv('HOST_1'), os.getenv('D
 
     common_tables = set(tables1) & set(tables2)
     for table_name in common_tables:
-        count1, count2 = compare_table_counts(cursor1, cursor2, table_name)
+        count1, count2, indexes1, indexes2, index_differences = compare_table_details(cursor1, cursor2, os.getenv('DB_TYPE_1'), os.getenv('DB_TYPE_2'), table_name)
         differences = abs(count1 - count2)
-        status = "Iguales" if count1 == count2 else f"Diferentes: diferencia de {differences} registros"
-        table.add_row([table_name, f"{count1} registros", f"{count2} registros", status])
+        status_records = "Iguales" if count1 == count2 else f"Diferentes: diferencia de {differences} registros"
+        status_indexes = "Iguales" if not index_differences else f"Diferentes: {len(index_differences)} índices distintos"
+        
+        # Modificado para mostrar en pantalla el número de índices en vez de sus nombres
+        table.add_row([table_name, f"{count1} registros", f"{count2} registros", status_records, f"{len(indexes1)} índices", f"{len(indexes2)} índices", status_indexes])
 
-    # Si deseas comparar tablas únicas, agrega esa lógica aquí
+    # Escribir resultados en consola
+    print(table)
 
-# Escribir resultados en consola y archivo de log
-# Escribir resultados en consola y archivo de log
-print(table)
-with open(log_file_name, "a") as log_file:
-    log_file.write(str(table))
-    log_file.write("\n")  # Asegurar una nueva línea al final para separación entre ejecuciones
+    # Preparar la misma tabla pero con el detalle de índices para el archivo de log
+    detailed_table = PrettyTable()
+    detailed_table.field_names = ["Tabla", "Servidor 1 (Registros)", "Servidor 2 (Registros)", "Estado Registros", "Índices Servidor 1", "Índices Servidor 2", "Diferencias Índices"]
+    for table_name in common_tables:
+        count1, count2, indexes1, indexes2, index_differences = compare_table_details(cursor1, cursor2, os.getenv('DB_TYPE_1'), os.getenv('DB_TYPE_2'), table_name)
+        differences = abs(count1 - count2)
+        status_records = "Iguales" if count1 == count2 else f"Diferentes: diferencia de {differences} registros"
+        status_indexes = "Iguales" if not index_differences else f"Diferentes: {', '.join(index_differences)}"
+        detailed_table.add_row([table_name, f"{count1} registros", f"{count2} registros", status_records, ', '.join(indexes1), ', '.join(indexes2), status_indexes])
 
+    # Escribir el detalle en el archivo de log
+    with open(log_file_name, "a") as log_file:
+        log_file.write("\n" + "-" * 64 + "\n")
+        log_file.write(f"----  Datos Resumidos  ----\n")
+        log_file.write("-" * 64 + "\n")
+        log_file.write(str(table))
+        log_file.write("\n") 
+        log_file.write("\n" + "-" * 64 + "\n")
+        log_file.write(f"----  Detalle de Indices  ----\n")
+        log_file.write("-" * 64 + "\n")
+        log_file.write(str(detailed_table))
+        log_file.write("\n") 
