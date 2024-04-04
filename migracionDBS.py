@@ -11,7 +11,7 @@ load_dotenv()
 
 # Conexión a las bases de datos
 connections = {
-    "mysql": lambda db_info: pymysql.connect(host=db_info['host'], user=db_info['user'], password=db_info['password'], database=db_info['db_name']),
+    "mysql": lambda db_info: pymysql.connect(host=db_info['host'], user=db_info['user'], password=db_info['password'], database=db_info['db_name'], connect_timeout=90),
     "sqlserver": lambda db_info: pyodbc.connect('DRIVER={ODBC Driver 17 for SQL Server};SERVER='+db_info['host']+';DATABASE='+db_info['db_name']+';UID='+db_info['user']+';PWD='+ db_info['password']),
     "postgresql": lambda db_info: psycopg2.connect(host=db_info['host'], dbname=db_info['db_name'], user=db_info['user'], password=db_info['password']),
 }
@@ -65,9 +65,14 @@ log_file_name = "db_comparisons_history.txt"
 
 # Función para agregar el encabezado de la ejecución al archivo de log
 def add_execution_header_to_log():
+    host1_info = f"BD1: {os.getenv('HOST_1')}"
+    host2_info = f"BD2: {os.getenv('HOST_2')}"
     with open(log_file_name, "a") as log_file:
         log_file.write("\n" + "-" * 64 + "\n")
         log_file.write(f"----  Ejecución: {datetime.now().strftime('%d/%m/%Y %I:%M %p')}  ----\n")
+        log_file.write(f"----------------------  BD's comparadas   ----------------------\n")
+        log_file.write(f"{host1_info.center(64, '-')}\n")
+        log_file.write(f"{host2_info.center(64, '-')}\n")
         log_file.write("-" * 64 + "\n")
 
 # Iniciar script

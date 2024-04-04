@@ -160,3 +160,4 @@ dmypy.json
 .pyre/
 .env*
 db_comparisons_history.txt
+respaldo_env.txt
