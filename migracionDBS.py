@@ -67,6 +67,11 @@ log_file_name = "db_comparisons_history.txt"
 def add_execution_header_to_log():
     host1_info = f"BD1: {os.getenv('HOST_1')}"
     host2_info = f"BD2: {os.getenv('HOST_2')}"
+    titulo = "Comparando"
+    print(f"{titulo.center(200, '-')}\n")
+    print(f"{host1_info.center(200, '-')}\n")
+    print(f"{host2_info.center(200, '-')}\n")
+    print("-" * 200 + "\n")
     with open(log_file_name, "a") as log_file:
         log_file.write("\n" + "-" * 64 + "\n")
         log_file.write(f"----  Ejecución: {datetime.now().strftime('%d/%m/%Y %I:%M %p')}  ----\n")
